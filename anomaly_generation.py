@@ -1,135 +1,15 @@
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import sklearn as sk
-import seaborn as sns
-import itertools
-import os
-from sklearn.preprocessing import StandardScaler
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-from sklearn.decomposition import PCA
-from itertools import combinations
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.ensemble import IsolationForest
 from sklearn.svm import OneClassSVM
-from pyod.models.ocsvm import OCSVM
 from sklearn.neighbors import NearestNeighbors
 from sklearn.mixture import GaussianMixture
 from hog_bisect.bisect import BisectHOGen
+import numpy as np
+import pandas as pd
 import pyod
-from pymfe.mfe import MFE
-
-
-
-
-
-proportions_list = [ [0.1, 0, 0.9], [0.2, 0, 0.8],
-                     [0.3, 0, 0.7], [0.4, 0, 0.6],
-                     [0.2, 0.1, 0.7], [0.3, 0.1, 0.6],
-                     [0.2, 0.2, 0.6],
-                     [0.8, 0, 0.2], [0.9, 0, 0.1], 
-                     [0.7, 0, 0.3], [0.6, 0, 0.4], 
-                     [0.5, 0, 0.5], 
-                     [0.7, 0.1, 0.2], 
-                     [0.6, 0.1, 0.3],
-                     [0.5, 0.1, 0.4], [0.4, 0.1, 0.5],
-                     [0.6, 0.2, 0.2], 
-                     [0.5, 0.2, 0.3], [0.5, 0.2, 0.3],
-                     [0.4, 0.2, 0.4], 
-                     [0.7, 0.3, 0], [1, 0, 0],
-                     [0, 0, 1], [0.9, 0.1, 0],
-                     [0.8, 0.2, 0]  ]
-
-
-class DataPreprocessing:
-    def __init__(self, path, numpy=True):
-        self._data, self._labels, self._feature_names = self._load_data(path, numpy)
-
-    def _load_data(self, path, numpy=True):
-        """
-        Load data from a CSV file, preprocess it, and identify labels if present.
-
-        Parameters:
-        path (str): The path to the CSV file.
-        numpy (bool): Whether to return the data as a NumPy array or a DataFrame. Default is True.
-
-        Returns:
-        tuple: (data, labels, feature_names)
-        """
-        try:
-            data = pd.read_csv(path)
-        except FileNotFoundError:
-            raise Exception(f"File not found at path: {path}")
-
-        # Check if the last column is binary (0 or 1 only) and use it as labels
-        last_column = data.iloc[:, -1]
-        if set(last_column.unique()) == {0, 1}:
-            labels = last_column.to_numpy()
-            data = data.iloc[:, :-1]
-        else:
-            labels = None
-
-        # Remove categorical columns
-        categorical_columns = data.select_dtypes(include=['object', 'category']).columns
-        data = data.drop(columns=categorical_columns)
-
-        feature_names = data.columns.tolist()
-
-        if numpy:
-            data = data.to_numpy()
-
-        return data, labels, feature_names
-
-    @property
-    def data(self):
-        return self._data
-
-    @property
-    def labels(self):
-        return self._labels
-
-    @property
-    def feature_names(self):
-        return self._feature_names    
-
-    def noise_level_adjustment(self, threshold=0.1):
-        """
-        Adjust the noise level in the instance's data and labels to meet the specified threshold.
-        
-        Parameters:
-        threshold (float): The desired noise level threshold. Default is 0.1.
-        
-        Updates:
-        self._data and self._labels with adjusted noise levels.
-        """
-        if not 0 <= threshold <= 1:
-            raise ValueError("Threshold must be between 0 and 1.")
-        
-        if self._labels is None:
-            raise ValueError("No labels found in the data.")
-        
-        clean_data = self._data[self._labels == 0]
-        current_noise_count = self._data[self._labels == 1].shape[0]
-        target_noise_count = int((threshold * clean_data.shape[0]) / (1 - threshold))
-        noise_to_remove_count = current_noise_count - target_noise_count
-        
-        noise_indices = np.where(self._labels == 1)[0]
-        if noise_to_remove_count > 0:
-            noise_indices_to_remove = np.random.choice(noise_indices, size=noise_to_remove_count, replace=False)
-            self._data = np.delete(self._data, noise_indices_to_remove, axis=0)
-            self._labels = np.delete(self._labels, noise_indices_to_remove)
-
-    def normalize_features(self):
-        """
-        Normalize the features using StandardScaler.
-        """
-        self._data = self._scaler.fit_transform(self._data)
-
-    def __str__(self):
-        return f"DataPreprocessing(n_samples={self._data.shape[0]}, n_features={self._data.shape[1]})"
-     
-     
+import os
+from sklearn.preprocessing import StandardScaler
+from preprocessing import *
 
 class AnomalyGenerator:
     def __init__(self, data):
@@ -210,8 +90,9 @@ class AnomalyGenerator:
 class GlobalAnomalyGenerator(AnomalyGenerator):
     def __init__(self, data):
         super().__init__(data)
-
-    def generate_point_anomaly(self, n_anomalies=1, mean=0, std=0.1):
+        
+        
+    def generate_point_anomaly(self, mean=0, std=0.1):
         """
         Generates a point anomaly by selecting a random point and adding Gaussian noise to it.
 
@@ -223,13 +104,11 @@ class GlobalAnomalyGenerator(AnomalyGenerator):
         Returns:
             np.ndarray: Generated anomalies.
         """
-        anomalies = []
-        for _ in range(n_anomalies):
-            idx = np.random.randint(0, self.data.shape[0])
-            anomaly = self.data[idx] + np.random.normal(mean, std, self.data.shape[1])
-            anomalies.append(anomaly)
-        return np.array(anomalies)
-
+       
+        idx = np.random.randint(0, self.data.shape[0])
+        anomaly = self.data[idx] + np.random.normal(mean, std, self.data.shape[1])
+        return anomaly  
+   
     def gaussian_noise(self, value, mean, std):
         """
         Adds Gaussian noise to a value.
@@ -262,7 +141,6 @@ class GlobalAnomalyGenerator(AnomalyGenerator):
                          uniform_lower=None, uniform_upper=None, anomaly_type=0):
         """
         Adds global noise to the dataset.
-
         Args:
             pct_data (float): Percentage of data points to modify.
             pct_features (float): Percentage of features to modify in each selected data point.
@@ -272,26 +150,26 @@ class GlobalAnomalyGenerator(AnomalyGenerator):
             uniform_lower (float): Lower bound for uniform noise.
             uniform_upper (float): Upper bound for uniform noise.
             anomaly_type (int): Type of anomaly to generate (0: easy, 1: medium, 2: interesting).
-
         Returns:
             tuple: Modified data and a dictionary of modifications made.
         """
+        dataset = self.data.copy()
         lof_model, if_model, svm_model = self.fit_validators()
-        num_samples = int(pct_data * len(self.data))
-        samples_to_modify = np.random.choice(np.arange(len(self.data)), num_samples, replace=False)
+        num_samples = int(pct_data * len(dataset))
+        samples_to_modify = np.random.choice(np.arange(len(dataset)), num_samples, replace=False)
         modifications = {}
 
         for sample in samples_to_modify:
             loop_condition = True        
-            easy_anomalies = np.empty((0, self.data.shape[1]))
-            medium_anomalies = np.empty((0, self.data.shape[1]))
-            interesting_anomalies = np.empty((0, self.data.shape[1]))
+            easy_anomalies = np.empty((0, dataset.shape[1]))
+            medium_anomalies = np.empty((0, dataset.shape[1]))
+            interesting_anomalies = np.empty((0, dataset.shape[1]))
             
             while loop_condition:
-                features_to_modify = np.random.choice(np.arange(self.data.shape[1]), 
-                                                    int(pct_features * (self.data.shape[1])), replace=False)
+                features_to_modify = np.random.choice(np.arange(dataset.shape[1]), 
+                                                    int(pct_features * (dataset.shape[1])), replace=False)
                 
-                noisy_datapoint = self.data[sample].copy()
+                noisy_datapoint = dataset[sample].copy()
                 
                 if sample not in modifications:
                     modifications[sample] = {}  # initialize if not already
@@ -303,7 +181,7 @@ class GlobalAnomalyGenerator(AnomalyGenerator):
 
                     if picked_noise == 'gaussian' and modifications[sample][feature] is None:
                         mean = gaussian_mean if gaussian_mean is not None else 0
-                        std = gaussian_std if gaussian_std is not None else np.std(self.data[:, feature])
+                        std = gaussian_std if gaussian_std is not None else np.std(dataset[:, feature])
                         noisy_datapoint[feature] = self.gaussian_noise(noisy_datapoint[feature], mean, std)
                         modifications[sample][feature] = 'gaussian'
 
@@ -313,7 +191,7 @@ class GlobalAnomalyGenerator(AnomalyGenerator):
                     
                     elif picked_noise == 'swap' and modifications[sample][feature] is None:
                         other_feature = np.random.choice(features_to_modify)
-                        if (pct_features * self.data.shape[1]) >= 2:
+                        if (pct_features * dataset.shape[1]) >= 2:
                             while other_feature == feature:
                                 other_feature = np.random.choice(features_to_modify)
                         
@@ -326,15 +204,15 @@ class GlobalAnomalyGenerator(AnomalyGenerator):
                                                                                             np.array([noisy_datapoint]))
                 
                 if easy_anomalies.size > 0 and anomaly_type == 0:
-                    self.data[sample] = easy_anomalies
+                    dataset[sample] = easy_anomalies
                     loop_condition = False
                 
                 elif medium_anomalies.size > 0 and (anomaly_type == 0 or anomaly_type == 1):
-                    self.data[sample] = medium_anomalies
+                    dataset[sample] = medium_anomalies
                     loop_condition = False
                         
                 elif interesting_anomalies.size > 0 and (anomaly_type == 0 or anomaly_type == 1 or anomaly_type == 2):
-                    self.data[sample] = interesting_anomalies
+                    dataset[sample] = interesting_anomalies
                     loop_condition = False
                         
                 else:
@@ -342,13 +220,15 @@ class GlobalAnomalyGenerator(AnomalyGenerator):
                     modifications[sample] = {}
 
         # add column that indicates the type of anomaly
-        self.data = np.c_[self.data, np.zeros(self.data.shape[0])]
-        self.data[samples_to_modify, -1] = 1
-                    
-        return modifications, self.data
+        dataset = np.c_[dataset, np.zeros(dataset.shape[0])]
+        dataset[samples_to_modify, -1] = 1
+        return modifications, dataset
+
 
     def generate_noise(self, *args, **kwargs):
         return self.generate_point_anomaly(*args, **kwargs)
+
+
 
     def add_noise(self, *args, **kwargs):
         return self.add_global_noise(*args, **kwargs)
@@ -360,6 +240,24 @@ class CollectiveAnomalyGenerator(AnomalyGenerator):
     def __init__(self, data):
         super().__init__(data)
 
+    def generate_point_anomaly(self, mean=0, std=0.1):
+        """
+        Generates a point anomaly by selecting a random point and adding Gaussian noise to it.
+
+        Args:
+            n_anomalies (int): Number of anomalies to generate.
+            mean (float): Mean of the Gaussian noise.
+            std (float): Standard deviation of the Gaussian noise.
+
+        Returns:
+            np.ndarray: Generated anomalies.
+        """
+       
+        idx = np.random.randint(0, self.data.shape[0])
+        anomaly = self.data[idx] + np.random.normal(mean, std, self.data.shape[1])
+        return anomaly    
+    
+    
     def generate_collective_noise(self, global_outlier, k=5, num_collective_anomalies=3, adaptive_cov=True, dispersion=0.8):
         """
         Generates collective noise (a cluster of anomalies) around a given global outlier.
@@ -374,11 +272,12 @@ class CollectiveAnomalyGenerator(AnomalyGenerator):
         Returns:
             np.ndarray: Array containing the global outlier and generated collective anomalies.
         """
-        nbrs = NearestNeighbors(n_neighbors=k+1).fit(self.data)
+        dataset = self.data.copy()
+        nbrs = NearestNeighbors(n_neighbors=k+1).fit(dataset)
         distances, indices = nbrs.kneighbors([global_outlier])
         
         knn_indices = indices[0][1:]
-        knn = self.data[knn_indices]
+        knn = dataset[knn_indices]
 
         if adaptive_cov:
             distance_outlier = np.mean(distances[0][1:])
@@ -399,35 +298,40 @@ class CollectiveAnomalyGenerator(AnomalyGenerator):
 
         return np.vstack([global_outlier, collective_anomalies])
 
+    
     def add_collective_noise(self, global_noise_means, global_noise_sds, num_clusters=1, cluster_sizes=None):
         """
         Adds collective noise to the dataset with variable noise levels per cluster.
-
         Args:
             global_noise_means (list): Means for generating global point anomalies for each cluster.
-            global_noise_sds (list): Standard deviations for generating global point anomalies for each cluster.
+            global_noise_sds (list): Standard deviations for generating global point anomalies 
+                                     for each cluster.
             num_clusters (int): The number of collective noise clusters to generate.
             cluster_sizes (list): Number of data points in each cluster.
 
         Returns:
             np.ndarray: The dataset with added collective noise.
         """
+        dataset = self.data.copy()
+        
         if len(global_noise_means) != num_clusters or len(global_noise_sds) != num_clusters:
             raise ValueError("The number of means and standard deviations should match the number of clusters.")
 
         if cluster_sizes is None:
-            cluster_sizes = [len(self.data) // num_clusters] * num_clusters
+            cluster_sizes = [len(dataset) // num_clusters] * num_clusters
 
         for i, cluster_size in enumerate(cluster_sizes):
-            global_anomaly = self.generate_point_anomaly(n_anomalies=1, mean=global_noise_means[i], std=global_noise_sds[i])
+            global_anomaly = self.generate_point_anomaly(mean=global_noise_means[i], std=global_noise_sds[i])
             collective_anomalies = self.generate_collective_noise(global_outlier=global_anomaly, num_collective_anomalies=cluster_size)
-            self.data = np.vstack([self.data, collective_anomalies])
+            dataset = np.vstack([dataset, collective_anomalies])
 
         # Add a column to indicate anomalies
-        self.data = np.column_stack((self.data, np.zeros(self.data.shape[0])))
-        self.data[-(sum(cluster_sizes)):, -1] = 3
+        dataset = np.column_stack((dataset, np.zeros(dataset.shape[0])))
+        dataset[-(sum(cluster_sizes)):, -1] = 3
 
-        return self.data
+        return dataset
+
+
 
     def generate_noise(self, *args, **kwargs):
         return self.generate_collective_noise(*args, **kwargs)
@@ -441,8 +345,6 @@ class NoisyDatasetCreator:
     
     def __init__(self, clean_data):
         self.clean_data = clean_data
-        self.global_generator = GlobalAnomalyGenerator(clean_data)
-        self.collective_generator = CollectiveAnomalyGenerator(clean_data)
 
     
     def create_noisy_dataset(self, noise_types, global_noise_types, global_noise_parameters, sample_pct, feature_pct,
@@ -450,7 +352,6 @@ class NoisyDatasetCreator:
                              save_path=".", dataset_name="dataset"):
         """
         Creates a noisy dataset with specified types and proportions of noise.
-
         Args:
             noise_types (list): Proportions of global, hidden, and collective noise.
             global_noise_types (list): Types of global noise to add.
@@ -463,16 +364,13 @@ class NoisyDatasetCreator:
             anomaly_level (int): Level of anomaly to generate (0: easy, 1: medium, 2: interesting).
             save_path (str): Path to save the generated dataset.
             dataset_name (str): Name of the dataset.
-
         Returns:
             np.ndarray: The generated noisy dataset.
         """
         modified_data = self.clean_data.copy()
-        
         num_glob = round(noise_types[0] * sample_pct * modified_data.shape[0])
         num_hidd = round(noise_types[1] * sample_pct * modified_data.shape[0])
         num_coll = round(noise_types[2] * sample_pct * modified_data.shape[0])
-        
         
         if clusters_proportions is not None:
             cluster_sizes = [round(num_coll * prop) for prop in clusters_proportions]
@@ -480,12 +378,13 @@ class NoisyDatasetCreator:
                 raise ValueError("All cluster sizes for the collective noise must be greater than 1")
 
         if noise_types[0] > 0:
-            _, modified_data = self.global_generator.add_global_noise(
-                num_glob / modified_data.shape[0], feature_pct, global_noise_types, 
-                global_noise_parameters[0], global_noise_parameters[1], 
-                global_noise_parameters[2], global_noise_parameters[3], 
-                anomaly_type=anomaly_level
-            )
+            global_generator = GlobalAnomalyGenerator(modified_data)
+            _, modified_data = global_generator.add_global_noise(
+                                    num_glob / modified_data.shape[0], feature_pct, global_noise_types, 
+                                    global_noise_parameters[0], global_noise_parameters[1], 
+                                    global_noise_parameters[2], global_noise_parameters[3], 
+                                    anomaly_type=anomaly_level
+                                    )
 
         if noise_types[1] > 0:
             generator = BisectHOGen(modified_data[:, :modified_data.shape[1]-1], outlier_detection_method=pyod.models.ocsvm.OCSVM)
@@ -494,13 +393,26 @@ class NoisyDatasetCreator:
             modified_data = np.vstack([modified_data, hidden_anomalies])
  
         if noise_types[2] > 0:
-            modified_data = self.collective_generator.add_collective_noise(
-                global_noise_means=anomaly_means,
-                global_noise_sds=anomaly_sds,
-                num_clusters=len(clusters_proportions),
-                cluster_sizes=cluster_sizes
-            )
-
+            if noise_types[0] == 0 and noise_types[1] == 0:
+                collective_generator = CollectiveAnomalyGenerator(modified_data)
+                modified_data = collective_generator.add_collective_noise(
+                                                    global_noise_means=anomaly_means,
+                                                    global_noise_sds=anomaly_sds,
+                                                    num_clusters=len(clusters_proportions),
+                                                    cluster_sizes=cluster_sizes
+                                                    )
+            else:
+                modified_data2 = self.clean_data.copy()
+                collective_generator = CollectiveAnomalyGenerator(modified_data2)
+                modified_data2 = collective_generator.add_collective_noise(
+                                                    global_noise_means=anomaly_means,
+                                                    global_noise_sds=anomaly_sds,
+                                                    num_clusters=len(clusters_proportions),
+                                                    cluster_sizes=cluster_sizes
+                                                    )   
+                collective_anomalies = modified_data2[-sum(cluster_sizes):, :]
+                modified_data = np.vstack([modified_data, collective_anomalies]) 
+                
         # Remove normal samples to maintain the original dataset size
         non_anomaly_indices = np.where(modified_data[:, -1] == 0)[0]
         indices_to_remove = np.random.choice(non_anomaly_indices, num_coll + num_hidd, replace=False)
@@ -549,7 +461,7 @@ class NoisyDatasetCreator:
                 print(proportions)
                 if proportions[2] > 0.5 and (sample_pct * self.clean_data.shape[0] * proportions[2] >= 6):
                     # Two collective clusters
-                    self.create_noisy_dataset(proportions, global_noise_types, global_noise_parameters, 
+                    _ = self.create_noisy_dataset(proportions, global_noise_types, global_noise_parameters, 
                                               sample_pct, feature_pct, anomaly_means, anomaly_sds, 
                                               clusters_proportions, anomaly_level, save_path, dataset_name)
                     
