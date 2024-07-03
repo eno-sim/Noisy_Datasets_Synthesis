@@ -34,10 +34,10 @@ proportions_list = [ [0.1, 0, 0.9], [0.2, 0, 0.8],
                      [0, 0, 1], [0.9, 0.1, 0],
                      [0.8, 0.2, 0]  ]
 
-preproc = DataPreprocessing('/home/enosim/Desktop/PoAC for Noise Reduction/Datasets/iris.csv', numpy=True)
+preproc = DataPreprocessing('/home/enosim/Desktop/PoAC for Noise Reduction/Noisy_Datasets_Synthesis/Datasets/iris.csv', numpy=True)
 synthesizer = NoisyDatasetCreator(preproc.data)
 
 synthesizer.multiple_datasets_synthesis(proportions_list=proportions_list, sample_pcts=[0.05, 0.1], feature_pct=0.5, 
                   global_noise_types=["gaussian", "swap"], global_noise_parameters=[1.2, 0.1, 1, 1], anomaly_means=[2, -2],
-                  anomaly_sds=[0.1, 0.1], clusters_proportions=[0.5, 0.5], anomaly_level=0, save_path='./Datasets',
+                  anomaly_sds=[0.1, 0.1], clusters_proportions=[0.5, 0.5], anomaly_level=0, save_path='./Noisy_Datasets',
                   dataset_name='iris' )
